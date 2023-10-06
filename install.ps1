@@ -50,6 +50,8 @@
     Use the credentials of the current user for the proxy server that is specified by the -Proxy parameter.
 .PARAMETER RunAsAdmin
     Force to run the installer as administrator.
+.PARAMETER Portable
+    A Portable setup
 .LINK
     https://scoop.sh
 .LINK
@@ -63,7 +65,8 @@ param(
     [Uri] $Proxy,
     [System.Management.Automation.PSCredential] $ProxyCredential,
     [Switch] $ProxyUseDefaultCredentials,
-    [Switch] $RunAsAdmin
+    [Switch] $RunAsAdmin,
+    [Switch] $Portable
 )
 
 # Disable StrictMode in this script
@@ -113,6 +116,10 @@ function Test-ValidateParameter {
     if ($ProxyUseDefaultCredentials -and $null -ne $ProxyCredential) {
         Deny-Install "ProxyUseDefaultCredentials is conflict with ProxyCredential. Don't use the -ProxyCredential and -ProxyUseDefaultCredentials together."
     }
+
+    if ($Portable -and !$ScoopDir) {
+        Deny-Install "Portable mode must include -ScoopDir paramter."
+    }
 }
 
 function Test-IsAdministrator {
@@ -149,7 +156,7 @@ function Test-Prerequisite {
     }
 
     # Test if scoop is installed, by checking if scoop command exists.
-    if (Test-CommandAvailable('scoop')) {
+    if (!$Portable -and (Test-CommandAvailable('scoop'))) {
         Deny-Install "Scoop is already installed. Run 'scoop update' to get the latest version."
     }
 }
@@ -575,7 +582,7 @@ function Install-Scoop {
                 $Env:HTTPS_PROXY = $downloader.Proxy.Address
             }
             Write-Verbose "Cloning $SCOOP_PACKAGE_GIT_REPO to $SCOOP_APP_DIR"
-            git clone -q $SCOOP_PACKAGE_GIT_REPO $SCOOP_APP_DIR
+            git clone -q $SCOOP_PACKAGE_GIT_REPO --branch develop $SCOOP_APP_DIR
             if (-Not $?) {
                 throw "Cloning failed. Falling back to downloading zip files."
             }
@@ -632,7 +639,11 @@ function Install-Scoop {
     # Create the scoop shim
     Import-ScoopShim
     # Finially ensure scoop shims is in the PATH
-    Add-ShimsDirToPath
+    if (!$Portable) {
+        Add-ShimsDirToPath
+    } else {
+        Write-InstallInfo "Portable mode - skip add shims dir to path."
+    }
     # Setup initial configuration of Scoop
     Add-DefaultConfig
 
@@ -656,6 +667,7 @@ function Write-DebugInfo {
     Write-Verbose "SCOOP_CACHE_DIR: $SCOOP_CACHE_DIR"
     Write-Verbose "SCOOP_GLOBAL_DIR: $SCOOP_GLOBAL_DIR"
     Write-Verbose "SCOOP_CONFIG_HOME: $SCOOP_CONFIG_HOME"
+    Write-Verbose "Portable Mode: $Portable"
 }
 
 # Prepare variables
@@ -677,6 +689,11 @@ $SCOOP_MAIN_BUCKET_DIR = "$SCOOP_DIR\buckets\main"
 $SCOOP_CONFIG_HOME = $env:XDG_CONFIG_HOME, "$env:USERPROFILE\.config" | Select-Object -First 1
 $SCOOP_CONFIG_FILE = "$SCOOP_CONFIG_HOME\scoop\config.json"
 
+if ($Portable) {
+    $SCOOP_CONFIG_HOME = $SCOOP_DIR
+    $SCOOP_CONFIG_FILE = "$SCOOP_CONFIG_HOME\config.json"
+}
+
 # TODO: Use a specific version of Scoop and the main bucket
 $SCOOP_PACKAGE_REPO = "https://github.com/ScoopInstaller/Scoop/archive/master.zip"
 $SCOOP_MAIN_BUCKET_REPO = "https://github.com/ScoopInstaller/Main/archive/master.zip"
@@ -687,6 +704,8 @@ $SCOOP_MAIN_BUCKET_GIT_REPO = "https://github.com/ScoopInstaller/Main.git"
 # Quit if anything goes wrong
 $oldErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
+
+$VerbosePreference = "Continue"
 
 # Logging debug info
 Write-DebugInfo $PSBoundParameters
