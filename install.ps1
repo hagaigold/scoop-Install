@@ -52,6 +52,8 @@
     Force to run the installer as administrator.
 .PARAMETER Portable
     A Portable setup
+.PARAMETER Develop
+    Use develop branch
 .LINK
     https://scoop.sh
 .LINK
@@ -66,7 +68,8 @@ param(
     [System.Management.Automation.PSCredential] $ProxyCredential,
     [Switch] $ProxyUseDefaultCredentials,
     [Switch] $RunAsAdmin,
-    [Switch] $Portable
+    [Switch] $Portable,
+    [Switch] $Develop
 )
 
 # Disable StrictMode in this script
@@ -546,6 +549,22 @@ function Add-DefaultConfig {
         }
     }
 
+    # scoop_repo
+    Write-Verbose "Adding config scoop_repo: $SCOOP_PACKAGE_GIT_REPO"
+    Add-Config -Name 'scoop_repo' -Value $SCOOP_PACKAGE_GIT_REPO | Out-Null
+
+    # scoop_branch
+    if ($Develop) {
+        Write-Verbose "Adding config scoop_branch: develop"
+        Add-Config -Name 'scoop_branch' -Value 'develop' | Out-Null
+    }
+
+    # portable
+    if ($portable) {
+        Write-Verbose "Adding config portable: $portable"
+        Add-Config -Name 'portable' -Value $portable | Out-Null
+    }
+
     # save current datatime to last_update
     Add-Config -Name 'last_update' -Value ([System.DateTime]::Now.ToString('o')) | Out-Null
 }
@@ -581,8 +600,10 @@ function Install-Scoop {
                 $Env:HTTP_PROXY = $downloader.Proxy.Address
                 $Env:HTTPS_PROXY = $downloader.Proxy.Address
             }
+            $boption = if ($Develop) { "--branch" } else { $null }
+            $devbranch = if ($Develop) { "develop" } else { $null }
             Write-Verbose "Cloning $SCOOP_PACKAGE_GIT_REPO to $SCOOP_APP_DIR"
-            git clone -q $SCOOP_PACKAGE_GIT_REPO --branch develop $SCOOP_APP_DIR
+            git clone -q $boption $devbranch $SCOOP_PACKAGE_GIT_REPO $SCOOP_APP_DIR
             if (-Not $?) {
                 throw "Cloning failed. Falling back to downloading zip files."
             }
@@ -642,7 +663,7 @@ function Install-Scoop {
     if (!$Portable) {
         Add-ShimsDirToPath
     } else {
-        Write-InstallInfo "Portable mode - skip add shims dir to path."
+        Write-InstallInfo "Portable mode DOESN'T add the shim-dir to path." -ForegroundColor Red
     }
     # Setup initial configuration of Scoop
     Add-DefaultConfig
@@ -698,7 +719,8 @@ if ($Portable) {
 $SCOOP_PACKAGE_REPO = "https://github.com/ScoopInstaller/Scoop/archive/master.zip"
 $SCOOP_MAIN_BUCKET_REPO = "https://github.com/ScoopInstaller/Main/archive/master.zip"
 
-$SCOOP_PACKAGE_GIT_REPO = "https://github.com/ScoopInstaller/Scoop.git"
+#$SCOOP_PACKAGE_GIT_REPO = "https://github.com/ScoopInstaller/Scoop.git"
+$SCOOP_PACKAGE_GIT_REPO = "https://github.com/hagaigold/Scoop.git"
 $SCOOP_MAIN_BUCKET_GIT_REPO = "https://github.com/ScoopInstaller/Main.git"
 
 # Quit if anything goes wrong
